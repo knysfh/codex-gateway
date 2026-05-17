@@ -1,0 +1,40 @@
+services:
+  cli-proxy-api:
+    image: eceasy/cli-proxy-api:latest
+    pull_policy: always
+    container_name: cli-proxy-api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8317:8317"
+      - "127.0.0.1:1455:1455"
+    volumes:
+      - ./config.yaml:/CLIProxyAPI/config.yaml
+      - ./auths:/root/.cli-proxy-api
+      - ./logs:/CLIProxyAPI/logs
+    networks:
+      - codex_net
+
+  cpa-manager:
+    image: seakee/cpa-manager:v1.2.2
+    pull_policy: always
+    container_name: cpa-manager
+    restart: unless-stopped
+    depends_on:
+      - cli-proxy-api
+    ports:
+      - "127.0.0.1:18317:18317"
+    environment:
+      HTTP_ADDR: 0.0.0.0:18317
+      CPA_UPSTREAM_URL: http://cli-proxy-api:8317
+      CPA_MANAGEMENT_KEY_FILE: /run/secrets/cpa_management_key
+      USAGE_COLLECTOR_MODE: http
+      USAGE_POLL_INTERVAL_MS: 500
+    volumes:
+      - ./data:/data
+      - ./secrets/cpa_management_key:/run/secrets/cpa_management_key:ro
+    networks:
+      - codex_net
+
+networks:
+  codex_net:
+    driver: bridge

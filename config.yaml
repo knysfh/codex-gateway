@@ -1,0 +1,46 @@
+# CLIProxyAPI configuration for a split-domain deployment:
+# - codex.abc.com fronts the API
+# - cpam.abc.com fronts CPA-Manager
+# 
+# Replace the two CHANGE_ME values before first start.
+# Keep this file writable: CLIProxyAPI hashes the plaintext management key
+# on startup and writes the hash back into this file.
+
+host: ""
+port: 8317
+
+remote-management:
+  allow-remote: true
+  secret-key: "CHANGE_ME_MANAGEMENT_KEY"
+  disable-control-panel: true
+
+auth-dir: "~/.cli-proxy-api"
+
+api-keys:
+  - "CHANGE_ME_CLIENT_API_KEY"
+
+debug: false
+commercial-mode: true
+logging-to-file: true
+logs-max-total-size-mb: 1024
+
+usage-statistics-enabled: true
+redis-usage-queue-retention-seconds: 300
+
+proxy-url: ""
+
+request-retry: 2
+max-retry-credentials: 2
+max-retry-interval: 15
+
+routing:
+  strategy: "round-robin"
+  session-affinity: true
+  session-affinity-ttl: "1h"
+
+codex-instructions-enabled: true
+nonstream-keepalive-interval: 15
+
+streaming:
+  keepalive-seconds: 15
+  bootstrap-retries: 1

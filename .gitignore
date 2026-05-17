@@ -1,0 +1,8 @@
+auths/*
+data/*
+logs/*
+secrets/*
+!auths/.gitkeep
+!data/.gitkeep
+!logs/.gitkeep
+!secrets/.gitkeep
