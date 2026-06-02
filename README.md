@@ -2,7 +2,7 @@
 
 [简体中文](./README.zh-CN.md)
 
-`codex-gateway` is a portable Docker Compose bootstrap for routing Codex-compatible code-agent traffic through a VPS, CLIProxyAPI/CPA, and Cloudflare. It is designed for operators who already own a domain such as `abc.com`, already use Cloudflare, and want a small self-hosted gateway they can bring up quickly.
+`codex-gateway` is a portable Docker Compose bootstrap for routing Codex-compatible code-agent traffic through a VPS, CLIProxyAPI/CPA, and Cloudflare. It is designed for operators who already own a domain such as `abc.com`, already use Cloudflare, and want a small self-hosted gateway they can bring up quickly. If you need token distribution, the same Compose file can optionally start Done Hub.
 
 This repository does not try to provision your VPS, DNS, or reverse proxy automatically. Its scope is the runtime bundle: `config.yaml`, `docker-compose.yml`, local persistence directories, and an Nginx sample you can merge into an existing edge setup.
 
@@ -12,6 +12,7 @@ This repository does not try to provision your VPS, DNS, or reverse proxy automa
 - Exposes a CPA Manager web UI behind `cpam.abc.com`
 - Keeps the container ports bound to `127.0.0.1` so Nginx and Cloudflare remain the public edge
 - Provides a repeatable layout for auth state, logs, and local data
+- Optionally exposes Done Hub token distribution behind `hub.abc.com`
 
 ## Deployment Flow
 
@@ -49,13 +50,46 @@ chmod 600 secrets/cpa_management_key
 
 Important: CLIProxyAPI may hash the management key back into `config.yaml` on first start. Keep the original plaintext `MANAGEMENT_KEY` somewhere safe, because you still need that plaintext to sign in to the management UI later.
 
+If you also need Done Hub token distribution, generate the database and session secrets for Done Hub:
+
+```bash
+DONE_HUB_DB_PASSWORD="$(openssl rand -hex 24)"
+DONE_HUB_MYSQL_ROOT_PASSWORD="$(openssl rand -hex 24)"
+DONE_HUB_SESSION_SECRET="$(openssl rand -hex 32)"
+DONE_HUB_USER_TOKEN_SECRET="$(openssl rand -hex 32)"
+DONE_HUB_HASHIDS_SALT="$(openssl rand -hex 24)"
+
+printf 'DONE_HUB_DB_PASSWORD=%s\n' "$DONE_HUB_DB_PASSWORD"
+printf 'DONE_HUB_MYSQL_ROOT_PASSWORD=%s\n' "$DONE_HUB_MYSQL_ROOT_PASSWORD"
+printf 'DONE_HUB_SESSION_SECRET=%s\n' "$DONE_HUB_SESSION_SECRET"
+printf 'DONE_HUB_USER_TOKEN_SECRET=%s\n' "$DONE_HUB_USER_TOKEN_SECRET"
+printf 'DONE_HUB_HASHIDS_SALT=%s\n' "$DONE_HUB_HASHIDS_SALT"
+```
+
+Then replace these Done Hub placeholders in [docker-compose.yml](./docker-compose.yml):
+
+- `CHANGE_DB_PASSWORD` -> `DONE_HUB_DB_PASSWORD`
+- `CHANGE_DONE_HUB_MYSQL_ROOT_PASSWORD` -> `DONE_HUB_MYSQL_ROOT_PASSWORD`
+- `CHANGE_SESSION_SECRET_64_HEX` -> `DONE_HUB_SESSION_SECRET`
+- `CHANGE_USER_TOKEN_SECRET_64_HEX` -> `DONE_HUB_USER_TOKEN_SECRET`
+- `CHANGE_HASHIDS_SALT_48_HEX` -> `DONE_HUB_HASHIDS_SALT`
+
+If you do not enable token distribution, you do not need to replace these Done Hub placeholders.
+
 ### 3. Start Docker Compose
 
-Bring the stack up:
+Start only the Codex gateway and CPA Manager when token distribution is not needed:
 
 ```bash
 docker compose up -d
 docker compose logs -f --tail=100
+```
+
+Start the gateway plus Done Hub, Done Hub MySQL, and Done Hub Redis when token distribution is needed:
+
+```bash
+docker compose --profile token-hub up -d
+docker compose --profile token-hub logs -f --tail=100
 ```
 
 Quick local checks:
@@ -63,38 +97,48 @@ Quick local checks:
 ```bash
 curl -i http://127.0.0.1:8317/v1/models
 curl -i http://127.0.0.1:18317/health
+curl -i http://127.0.0.1:4037/api/status
 ```
 
-At this stage the services should remain local-only. Do not publish `8317`, `18317`, or `1455` directly to the internet.
+Port `4037` only exists when token distribution is enabled. At this stage the services should remain local-only. Do not publish `8317`, `18317`, `1455`, or `4037` directly to the internet.
 
 ### 4. Put Nginx in Front
 
-Merge the two server blocks from [nginx.sample.conf](./nginx.sample.conf) into your existing Nginx configuration and adjust certificate paths for your environment.
+Merge the server blocks from [nginx.sample.conf](./nginx.sample.conf) into your existing Nginx configuration and adjust certificate paths for your environment. The first two server blocks are for the base gateway; add the optional `hub.abc.com` server block only if you enable Done Hub token distribution.
 
 Expected routing:
 
 - `codex.abc.com` -> `127.0.0.1:8317`
 - `cpam.abc.com` -> `127.0.0.1:18317`
+- `hub.abc.com` -> `127.0.0.1:4037`, only for token distribution
 
 Reload Nginx after the configuration is in place.
 
 ### 5. Add the Cloudflare DNS Records
 
-In Cloudflare DNS, add:
+When token distribution is not needed, add two Cloudflare DNS records:
 
 - `A` record: `codex.abc.com` -> your VPS public IP
 - `A` record: `cpam.abc.com` -> your VPS public IP
 
+When token distribution is needed, add a third DNS record:
+
+- `A` record: `hub.abc.com` -> your VPS public IP
+
 Recommended Cloudflare settings:
 
-- Proxy both records through the orange cloud
+- Proxy all records through the orange cloud
 - Set `SSL/TLS` to `Full (strict)`
-- Bypass caching for `codex.abc.com/*` and `cpam.abc.com/*`
+- Bypass caching for `codex.abc.com/*`, `cpam.abc.com/*`, and `hub.abc.com/*`
 - Do not enable an interactive challenge page on `codex.abc.com`, or CLI clients may fail
 
 ### 6. Management UI Screenshot
 
+- cloudflare DNS Records
+
 ![Cloudfalre DNS Config](./docs/images/cloudflare-dns-config.jpg)
+
+- cloudflare Security Rule
 
 ![Cloudfalre Security Rule](./docs/images/cloudflare-security-rule.jpg)
 
@@ -108,6 +152,14 @@ https://cpam.abc.com/
 
 When prompted, enter the original plaintext `CHANGE_ME_MANAGEMENT_KEY` value you generated with `openssl`. That completes the management login.
 
+If Done Hub token distribution is enabled, open:
+
+```text
+https://hub.abc.com/
+```
+
+Then finish the Done Hub admin account, channel, and token distribution setup.
+
 ### 8. Complete Codex OAuth
 
 From the management UI, start the Codex OAuth flow. During the login process you will get a long callback URL that points to `http://localhost:1455/...`.
@@ -116,7 +168,7 @@ Copy that full `localhost:1455` callback URL and paste it back into the page. On
 
 ## Operational Notes
 
-- Keep `auths/`, `data/`, `logs/`, and `secrets/` out of Git and out of any public file serving path.
+- Keep `auths/`, `data/`, `logs/`, and `secrets/` out of Git and out of any public file serving path. Done Hub stores its MySQL data under `data/done-hub/mysql/`.
 - `1455` is only for the OAuth callback flow and should stay bound to `127.0.0.1`.
 - If you need stricter protection for `cpam.abc.com`, add Cloudflare Access in front of it.
 
@@ -126,5 +178,6 @@ This setup stands on a few solid open source projects:
 
 - [router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)
 - [seakee/CPA-Manager](https://github.com/seakee/CPA-Manager)
+- [deanxv/done-hub](https://github.com/deanxv/done-hub)
 - [nginx/nginx](https://github.com/nginx/nginx)
 - [docker/compose](https://github.com/docker/compose)

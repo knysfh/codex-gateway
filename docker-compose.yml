@@ -35,6 +35,69 @@ services:
     networks:
       - codex_net
 
+  done-hub:
+    image: deanxv/done-hub:latest
+    pull_policy: always
+    container_name: done-hub
+    restart: unless-stopped
+    profiles:
+      - token-hub
+    depends_on:
+      - done-hub-mysql
+      - done-hub-redis
+    ports:
+      - "127.0.0.1:4037:3000"
+    volumes:
+      - ./data/done-hub:/data
+    environment:
+      SQL_DSN: "donehub:CHANGE_DB_PASSWORD@tcp(done-hub-mysql:3306)/donehub"
+      REDIS_CONN_STRING: "redis://done-hub-redis:6379"
+      SESSION_SECRET: "CHANGE_SESSION_SECRET_64_HEX"
+      USER_TOKEN_SECRET: "CHANGE_USER_TOKEN_SECRET_64_HEX"
+      HASHIDS_SALT: "CHANGE_HASHIDS_SALT_48_HEX"
+      TZ: "America/Los_Angeles"
+      GIN_MODE: "release"
+      TRUSTED_HEADER: "CF-Connecting-IP"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -Eq '\"success\"[[:space:]]*:[[:space:]]*true'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - codex_net
+
+  done-hub-mysql:
+    image: mysql:8.2.0
+    container_name: done-hub-mysql
+    restart: unless-stopped
+    profiles:
+      - token-hub
+    volumes:
+      - ./data/done-hub/mysql:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: "CHANGE_DONE_HUB_MYSQL_ROOT_PASSWORD"
+      MYSQL_USER: "donehub"
+      MYSQL_PASSWORD: "CHANGE_DB_PASSWORD"
+      MYSQL_DATABASE: "donehub"
+      TZ: "America/Los_Angeles"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    networks:
+      - codex_net
+
+  done-hub-redis:
+    image: redis:7-alpine
+    container_name: done-hub-redis
+    restart: unless-stopped
+    profiles:
+      - token-hub
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ./data/done-hub/redis:/data
+    networks:
+      - codex_net
+
 networks:
   codex_net:
     driver: bridge
