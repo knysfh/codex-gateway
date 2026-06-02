@@ -54,7 +54,8 @@ services:
       REDIS_CONN_STRING: "redis://done-hub-redis:6379"
       SESSION_SECRET: "CHANGE_SESSION_SECRET_64_HEX"
       USER_TOKEN_SECRET: "CHANGE_USER_TOKEN_SECRET_64_HEX"
-      HASHIDS_SALT: "CHANGE_HASHIDS_SALT_48_HEX"
+      # HASHIDS_SALT is optional. If you set it, every character must be unique;
+      # random hex strings will fail with "alphabet must contain unique characters".
       TZ: "America/Los_Angeles"
       GIN_MODE: "release"
       TRUSTED_HEADER: "CF-Connecting-IP"

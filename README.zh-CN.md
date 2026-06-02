@@ -57,13 +57,11 @@ DONE_HUB_DB_PASSWORD="$(openssl rand -hex 24)"
 DONE_HUB_MYSQL_ROOT_PASSWORD="$(openssl rand -hex 24)"
 DONE_HUB_SESSION_SECRET="$(openssl rand -hex 32)"
 DONE_HUB_USER_TOKEN_SECRET="$(openssl rand -hex 32)"
-DONE_HUB_HASHIDS_SALT="$(openssl rand -hex 24)"
 
 printf 'DONE_HUB_DB_PASSWORD=%s\n' "$DONE_HUB_DB_PASSWORD"
 printf 'DONE_HUB_MYSQL_ROOT_PASSWORD=%s\n' "$DONE_HUB_MYSQL_ROOT_PASSWORD"
 printf 'DONE_HUB_SESSION_SECRET=%s\n' "$DONE_HUB_SESSION_SECRET"
 printf 'DONE_HUB_USER_TOKEN_SECRET=%s\n' "$DONE_HUB_USER_TOKEN_SECRET"
-printf 'DONE_HUB_HASHIDS_SALT=%s\n' "$DONE_HUB_HASHIDS_SALT"
 ```
 
 然后编辑 [docker-compose.yml](./docker-compose.yml)，替换 Done Hub 相关占位符：
@@ -72,7 +70,15 @@ printf 'DONE_HUB_HASHIDS_SALT=%s\n' "$DONE_HUB_HASHIDS_SALT"
 - `CHANGE_DONE_HUB_MYSQL_ROOT_PASSWORD` -> `DONE_HUB_MYSQL_ROOT_PASSWORD`
 - `CHANGE_SESSION_SECRET_64_HEX` -> `DONE_HUB_SESSION_SECRET`
 - `CHANGE_USER_TOKEN_SECRET_64_HEX` -> `DONE_HUB_USER_TOKEN_SECRET`
-- `CHANGE_HASHIDS_SALT_48_HEX` -> `DONE_HUB_HASHIDS_SALT`
+
+Done Hub 还支持可选的 `HASHIDS_SALT`。虽然变量名里有 salt，但 Done Hub 会按 Hashids alphabet 校验它：每个字符都必须唯一。不要用 `openssl rand -hex` 生成这个值，因为随机 hex 一定会出现重复字符，启动时可能报 `alphabet must contain unique characters`。
+
+如果你确实要设置它，可以先生成一组打乱顺序的唯一字符，再加到 `done-hub.environment` 里：
+
+```bash
+DONE_HUB_HASHIDS_SALT="$(printf '%s' 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' | fold -w1 | shuf | tr -d '\n')"
+printf 'DONE_HUB_HASHIDS_SALT=%s\n' "$DONE_HUB_HASHIDS_SALT"
+```
 
 不启用 token 分发时，可以不替换这些 Done Hub 占位符。
 
